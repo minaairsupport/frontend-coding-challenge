@@ -1,17 +1,18 @@
-import { action, observable, flow } from "mobx";
-import { CancellablePromise } from "mobx/lib/api/flow";
-import { IRootStore } from "../root/store";
-import { GithubRepoRepository } from "./repository";
+import { action, observable, flow } from 'mobx';
+import { CancellablePromise } from 'mobx/dist/api/flow';
+import { IRootStore } from '../root/store';
+import { GithubRepoRepository } from './repository';
 
-import { GithubRepoInputOptions, GithubRepoType } from "./types";
+import { GithubRepoInputOptions, GithubRepoType } from './types';
 
 export interface IGithubRepoStore {
   repos: GithubRepoType[] | null;
   load: (options: GithubRepoInputOptions) => void;
   loading: boolean;
-  error: Error | null;
+  totalCount: number;
+  error: Error | null | unknown;
   clearError: () => void;
-  clear: () => void; 
+  clear: () => void;
 }
 
 export function GithubRepoStore(rootStore: IRootStore) {
@@ -23,14 +24,17 @@ export function GithubRepoStore(rootStore: IRootStore) {
       _currentLoad.cancel();
       _currentLoad = null;
     }
-  }
+  };
 
-  const _load = flow(async function*(options: GithubRepoInputOptions) {
+  const _load = flow(async function* (options: GithubRepoInputOptions) {
     store.loading = true;
-    store.repos = null;
     try {
       const repos = yield _repository.load(options);
-      store.repos = repos;
+      store.repos = !store.repos
+        ? repos.items
+        : [...(store.repos as GithubRepoType[]), ...repos.items];
+
+      store.totalCount = repos.total_count;
     } catch (error) {
       store.error = error;
     }
@@ -39,22 +43,22 @@ export function GithubRepoStore(rootStore: IRootStore) {
 
   const store: IGithubRepoStore = observable<IGithubRepoStore>({
     repos: null,
-    load: action<IGithubRepoStore["load"]>((options) => {
+    load: action<IGithubRepoStore['load']>((options) => {
       _cancelLoad();
       _currentLoad = _load(options);
     }),
     loading: false,
+    totalCount: 0,
     error: null,
-    clearError: action<IGithubRepoStore["clearError"]>(() => {
+    clearError: action<IGithubRepoStore['clearError']>(() => {
       store.error = null;
     }),
-    clear: action<IGithubRepoStore["clear"]>(() => {
+    clear: action<IGithubRepoStore['clear']>(() => {
       _cancelLoad();
       if (store.loading) {
         store.loading = false;
       }
     }),
-   
   });
 
   return store;
